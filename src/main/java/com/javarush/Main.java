@@ -29,10 +29,11 @@ public class Main {
 
     public Main() {
         sessionFactory = prepareRelationalDb();
+
         cityDAO = new CityDAO(sessionFactory);
         countryDAO = new CountryDAO(sessionFactory);
 
-        redisClient = prepareRedisClient();
+        redisClient = prepareRedisClient(); // пока заглушка
         mapper = new ObjectMapper();
     }
 
@@ -49,15 +50,19 @@ public class Main {
     private SessionFactory prepareRelationalDb() {
         Properties properties = new Properties();
 
-        properties.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
         properties.put("hibernate.connection.driver_class", "com.p6spy.engine.spy.P6SpyDriver");
         properties.put("hibernate.connection.url", "jdbc:p6spy:mysql://localhost:3307/world");
+
         properties.put("hibernate.connection.username", "root");
         properties.put("hibernate.connection.password", "root");
 
+        properties.put("hibernate.dialect", "org.hibernate.dialect.MySQL8Dialect");
         properties.put("hibernate.current_session_context_class", "thread");
         properties.put("hibernate.hbm2ddl.auto", "validate");
         properties.put("hibernate.jdbc.batch_size", "100");
+
+        properties.put("hibernate.show_sql", "true");
+        properties.put("hibernate.format_sql", "true");
 
         return new Configuration()
                 .addAnnotatedClass(City.class)
@@ -68,7 +73,17 @@ public class Main {
     }
 
     private RedisClient prepareRedisClient() {
+        // пока заглушка (по заданию)
         return null;
+    }
+
+    private void shutdown() {
+        if (nonNull(sessionFactory)) {
+            sessionFactory.close();
+        }
+        if (nonNull(redisClient)) {
+            redisClient.shutdown();
+        }
     }
 
     private List<City> fetchData(Main main) {
@@ -77,6 +92,9 @@ public class Main {
             List<City> allCities = new ArrayList<>();
 
             session.beginTransaction();
+
+            // 🔥 ВАЖНО: подгружаем все страны заранее
+            List<Country> countries = main.countryDAO.getAll();
 
             int totalCount = main.cityDAO.getTotalCount();
             int step = 500;
@@ -88,15 +106,6 @@ public class Main {
             session.getTransaction().commit();
 
             return allCities;
-        }
-    }
-
-    private void shutdown() {
-        if (nonNull(sessionFactory)) {
-            sessionFactory.close();
-        }
-        if (nonNull(redisClient)) {
-            redisClient.shutdown();
         }
     }
 }
