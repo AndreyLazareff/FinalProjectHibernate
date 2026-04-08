@@ -1,17 +1,102 @@
 package com.javarush;
 
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
-public class Main {
-    public static void main(String[] args) {
-        //TIP Press <shortcut actionId="ShowIntentionActions"/> with your caret at the highlighted text
-        // to see how IntelliJ IDEA suggests fixing it.
-        System.out.printf("Hello and welcome!");
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javarush.dao.CityDAO;
+import com.javarush.dao.CountryDAO;
+import com.javarush.domain.City;
+import com.javarush.domain.Country;
+import com.javarush.domain.CountryLanguage;
+import io.lettuce.core.RedisClient;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
 
-        for (int i = 1; i <= 5; i++) {
-            //TIP Press <shortcut actionId="Debug"/> to start debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-            // for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.
-            System.out.println("i = " + i);
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
+import static java.util.Objects.nonNull;
+
+public class Main {
+
+    private final SessionFactory sessionFactory;
+    private final RedisClient redisClient;
+
+    private final ObjectMapper mapper;
+
+    private final CityDAO cityDAO;
+    private final CountryDAO countryDAO;
+
+    public Main() {
+        sessionFactory = prepareRelationalDb();
+        cityDAO = new CityDAO(sessionFactory);
+        countryDAO = new CountryDAO(sessionFactory);
+
+        redisClient = prepareRedisClient();
+        mapper = new ObjectMapper();
+    }
+
+    public static void main(String[] args) {
+        Main main = new Main();
+
+        List<City> allCities = main.fetchData(main);
+
+        System.out.println("Cities loaded: " + allCities.size());
+
+        main.shutdown();
+    }
+
+    private SessionFactory prepareRelationalDb() {
+        Properties properties = new Properties();
+
+        properties.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
+        properties.put("hibernate.connection.driver_class", "com.p6spy.engine.spy.P6SpyDriver");
+        properties.put("hibernate.connection.url", "jdbc:p6spy:mysql://localhost:3307/world");
+        properties.put("hibernate.connection.username", "root");
+        properties.put("hibernate.connection.password", "root");
+
+        properties.put("hibernate.current_session_context_class", "thread");
+        properties.put("hibernate.hbm2ddl.auto", "validate");
+        properties.put("hibernate.jdbc.batch_size", "100");
+
+        return new Configuration()
+                .addAnnotatedClass(City.class)
+                .addAnnotatedClass(Country.class)
+                .addAnnotatedClass(CountryLanguage.class)
+                .addProperties(properties)
+                .buildSessionFactory();
+    }
+
+    private RedisClient prepareRedisClient() {
+        return null;
+    }
+
+    private List<City> fetchData(Main main) {
+        try (Session session = main.sessionFactory.getCurrentSession()) {
+
+            List<City> allCities = new ArrayList<>();
+
+            session.beginTransaction();
+
+            int totalCount = main.cityDAO.getTotalCount();
+            int step = 500;
+
+            for (int i = 0; i < totalCount; i += step) {
+                allCities.addAll(main.cityDAO.getItems(i, step));
+            }
+
+            session.getTransaction().commit();
+
+            return allCities;
+        }
+    }
+
+    private void shutdown() {
+        if (nonNull(sessionFactory)) {
+            sessionFactory.close();
+        }
+        if (nonNull(redisClient)) {
+            redisClient.shutdown();
         }
     }
 }
